@@ -74,8 +74,8 @@ simply finds it queued. The price of that shows up in (b), (d) and (e).
 Each file in [`footguns/`](footguns/) is a small patch that reintroduces one real mistake.
 `npm run footgun <name>` applies it, runs the whole suite, reverts it, and prints `PASS` only when
 **exactly** the tests listed in [`footguns/manifest.json`](footguns/manifest.json) fail and every
-other test stays green. The workflow runs all six (not yet executed on GitHub Actions at the time
-of writing).
+other test stays green. The workflow runs all six; the first green run on GitHub Actions is
+[41274697998](https://github.com/guillemustafa-ux/ai-jobs-idempotent-proof/actions/runs/41274697998).
 
 | Footgun | The mistake | Tests that fail |
 | --- | --- | --- |
@@ -97,8 +97,8 @@ the same race as (b).
 
 ## Run it
 
-Node 22.12 or later is declared in `engines`; exercised locally on Node 24.16, Node 22 not yet
-verified. No Docker and no API key.
+Node 22.12 or later is declared in `engines`; exercised locally on Node 24.16 and in CI on Node 22
+(run 41274697998). No Docker and no API key.
 
 ```bash
 npm ci
@@ -113,8 +113,8 @@ directory under the OS temp dir and removes it afterwards. Either way the tests 
 database that is dropped at the end.
 
 The workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs Ubuntu with a
-`postgres:16` service container and the footgun matrix on Ubuntu (not yet executed on GitHub
-Actions at the time of writing). On `windows-latest` the first run failed while embedded-postgres
+`postgres:16` service container and the footgun matrix on Ubuntu; run 41274697998 is green on
+every job. On `windows-latest` the first run failed while embedded-postgres
 was initialising, before any test ran, so the Windows job now runs the suite against the runner's
 preinstalled PostgreSQL 17, whose service the workflow starts. Locally, embedded-postgres stays
 the default.
