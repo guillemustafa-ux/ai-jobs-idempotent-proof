@@ -1,0 +1,32 @@
+diff --git a/src/honest/queue.ts b/src/honest/queue.ts
+index 527f1e2..a8864da 100644
+--- a/src/honest/queue.ts
++++ b/src/honest/queue.ts
+@@ -68,17 +68,20 @@ export function createHonestQueue(opts: QueueOptions): Queue {
+ 
+   /** Take the oldest queued job, or one whose owner's lease ran out. Never the same job twice. */
+   async function claimNext(): Promise<JobRow | undefined> {
++    const candidate = await pool.query(
++      `select id from ai_jobs
++        where status = 'queued'
++           or (status in ('claimed', 'calling') and lease_until < now())
++        order by created_at
++        limit 1`,
++    );
++    if (!candidate.rows[0]) return undefined;
+     const { rows } = await pool.query(
+       `update ai_jobs
+           set status = 'claimed', lease_until = now() + make_interval(secs => $1), updated_at = now()
+-        where id = (select id from ai_jobs
+-                     where status = 'queued'
+-                        or (status in ('claimed', 'calling') and lease_until < now())
+-                     order by created_at
+-                     for update skip locked
+-                     limit 1)
++        where id = $2
+         returning *`,
+-      [leaseSeconds],
++      [leaseSeconds, candidate.rows[0].id],
+     );
+     return rows[0];
+   }

@@ -1,0 +1,82 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Linux: a postgres:16 service container, passed to the tests as DATABASE_URL.
+  suite-ubuntu:
+    name: "baseline (ubuntu, postgres:16 service): suite must pass"
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+
+  # Windows: no service containers there, so the tests start Postgres 16 with embedded-postgres.
+  suite-windows:
+    name: "baseline (windows, embedded-postgres): suite must pass"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+
+  # The suite is only trustworthy if it BITES. Each footgun reintroduces one real mistake;
+  # the runner exits 0 only when exactly the tests documented for it fail.
+  footgun-must-be-caught:
+    name: "footgun ${{ matrix.footgun }}: exactly its tests must fail"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        footgun:
+          - no-claim-lock
+          - no-enqueue-dedupe
+          - ledger-after-call
+          - blind-retry-on-unconfirmed
+          - no-lease-expiry
+          - no-result-cache
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run footgun -- ${{ matrix.footgun }}

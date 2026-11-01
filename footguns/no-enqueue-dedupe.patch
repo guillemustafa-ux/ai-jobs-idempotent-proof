@@ -1,0 +1,25 @@
+diff --git a/src/honest/queue.ts b/src/honest/queue.ts
+index 527f1e2..9e5f807 100644
+--- a/src/honest/queue.ts
++++ b/src/honest/queue.ts
+@@ -43,7 +43,6 @@ export function createHonestQueue(opts: QueueOptions): Queue {
+     const inserted = await pool.query(
+       `insert into ai_jobs (job_key, tenant, resource, prompt_version, input_hash, model, prompt, cache_key)
+        values ($1, $2, $3, $4, $5, $6, $7, $8)
+-       on conflict (job_key) do nothing
+        returning id`,
+       [jobKey, req.tenant, req.resource, req.promptVersion, req.inputHash, model, req.prompt,
+         cacheKeyFor(req.inputHash, model, req.promptVersion)],
+diff --git a/supabase/migrations/0001_ai_jobs.sql b/supabase/migrations/0001_ai_jobs.sql
+index 725fece..2342d7d 100644
+--- a/supabase/migrations/0001_ai_jobs.sql
++++ b/supabase/migrations/0001_ai_jobs.sql
+@@ -19,7 +19,7 @@ create table if not exists public.ai_results (
+ 
+ create table if not exists public.ai_jobs (
+   id             uuid primary key default gen_random_uuid(),
+-  job_key        text not null unique,         -- tenant + sha256(tenant, resource, prompt_version, input_hash)
++  job_key        text not null,         -- tenant + sha256(tenant, resource, prompt_version, input_hash)
+   tenant         text not null,
+   resource       text not null,
+   prompt_version text not null,

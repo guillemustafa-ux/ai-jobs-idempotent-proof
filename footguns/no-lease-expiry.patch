@@ -1,0 +1,12 @@
+diff --git a/src/honest/queue.ts b/src/honest/queue.ts
+index 527f1e2..ae80079 100644
+--- a/src/honest/queue.ts
++++ b/src/honest/queue.ts
+@@ -73,7 +73,6 @@ export function createHonestQueue(opts: QueueOptions): Queue {
+           set status = 'claimed', lease_until = now() + make_interval(secs => $1), updated_at = now()
+         where id = (select id from ai_jobs
+                      where status = 'queued'
+-                        or (status in ('claimed', 'calling') and lease_until < now())
+                      order by created_at
+                      for update skip locked
+                      limit 1)

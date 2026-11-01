@@ -1,0 +1,20 @@
+diff --git a/src/honest/queue.ts b/src/honest/queue.ts
+index 527f1e2..6ec38fe 100644
+--- a/src/honest/queue.ts
++++ b/src/honest/queue.ts
+@@ -88,15 +88,6 @@ export function createHonestQueue(opts: QueueOptions): Queue {
+     const pending = await pool.query(`select 1 from ai_calls where job_id = $1 and status = 'started'`, [job.id]);
+     if (pending.rowCount && (await settleUnknown(pool, job.id, { requeue: false })) === 'unconfirmed') return;
+ 
+-    const cached = await pool.query(`select 1 from ai_results where cache_key = $1`, [job.cache_key]);
+-    if (cached.rowCount) {
+-      await pool.query(
+-        `update ai_jobs set status = 'done', result_key = $2, lease_until = null, updated_at = now() where id = $1`,
+-        [job.id, job.cache_key],
+-      );
+-      return;
+-    }
+-
+     crashIfAt(opts.crashAt, 'before_call');
+     for (;;) {
+       const attempt = await nextAttempt(job.id);

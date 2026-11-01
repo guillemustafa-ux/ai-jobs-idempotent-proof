@@ -1,0 +1,15 @@
+diff --git a/src/honest/queue.ts b/src/honest/queue.ts
+index 527f1e2..c2052e9 100644
+--- a/src/honest/queue.ts
++++ b/src/honest/queue.ts
+@@ -101,9 +101,9 @@ export function createHonestQueue(opts: QueueOptions): Queue {
+     for (;;) {
+       const attempt = await nextAttempt(job.id);
+       const callKey = `${job.job_key}:${attempt}`;
+-      await recordCallStarted(callKey, job.id, attempt); // committed BEFORE the request leaves
+       const outcome = await callProvider(opts.providerUrl, { callKey, model: job.model, prompt: job.prompt, timeoutMs: callTimeoutMs });
+       crashIfAt(opts.crashAt, 'after_charge');
++      await recordCallStarted(callKey, job.id, attempt); // recorded once the provider has answered
+ 
+       if (outcome.kind === 'ok') {
+         await persistResult(job, callKey, outcome.completion);
