@@ -56,7 +56,7 @@ Every number below is a literal in an assertion in [`test/scenarios.test.ts`](te
 
 | Scenario | Naive: charges, job state | Honest: charges, job state |
 | --- | --- | --- |
-| (a) the same request is enqueued twice | 2 job rows, both `created: true` | 1 job row, second enqueue `created: false`, same id |
+| (a) the same request is enqueued twice | 0, 2 job rows, both `created: true` | 0, 1 job row, second enqueue `created: false`, same id |
 | (b) two workers claim one queued job at once | 2, `done` | 1, `done` |
 | (c) worker process killed after the claim, before the call | 1, `done` | 1, `done` (re-claimed after the lease expired) |
 | (d) worker process killed after the provider billed, before the save | 2, `done` | 1, `unconfirmed`; the next worker pass makes no call |
@@ -74,7 +74,8 @@ simply finds it queued. The price of that shows up in (b), (d) and (e).
 Each file in [`footguns/`](footguns/) is a small patch that reintroduces one real mistake.
 `npm run footgun <name>` applies it, runs the whole suite, reverts it, and prints `PASS` only when
 **exactly** the tests listed in [`footguns/manifest.json`](footguns/manifest.json) fail and every
-other test stays green. CI runs all six.
+other test stays green. The workflow runs all six (not yet executed on GitHub Actions at the time
+of writing).
 
 | Footgun | The mistake | Tests that fail |
 | --- | --- | --- |
@@ -89,12 +90,15 @@ A result cache keyed by content absorbs a replay that runs after the first job f
 cannot help when both copies are in flight at once, which is what (i) runs. Under
 `no-enqueue-dedupe`, (i) fails with `duplicate key value violates unique constraint
 "ai_calls_pkey"`: the duplicate row's worker collides with the ledger's unique `call_key`.
+`runWorker` lets a `processJob` error propagate (that is what makes (i) fail under
+`no-enqueue-dedupe`); a production loop would catch it and mark the job.
 (i) also fails under `no-claim-lock`: after the dedupe, its two workers race for the one job,
 the same race as (b).
 
 ## Run it
 
-Requires Node 22.12 or later. No Docker and no API key.
+Node 22.12 or later is declared in `engines`; exercised locally on Node 24.16, Node 22 not yet
+verified. No Docker and no API key.
 
 ```bash
 npm ci
@@ -108,8 +112,9 @@ npm run footgun no-claim-lock
 directory under the OS temp dir and removes it afterwards. Either way the tests run in a new
 database that is dropped at the end.
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): Ubuntu with a `postgres:16`
-service container, Windows with embedded Postgres, and the footgun matrix on Ubuntu.
+The workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs Ubuntu with a
+`postgres:16` service container, Windows with embedded Postgres, and the footgun matrix on Ubuntu
+(not yet executed on GitHub Actions at the time of writing).
 
 Crash tests run the worker as a separate process (`node --import tsx src/worker.ts`) that kills
 itself with `SIGKILL` at the point named by `FAULT=before_call|after_charge`. No exception stands

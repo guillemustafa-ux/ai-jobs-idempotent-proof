@@ -83,6 +83,7 @@ describe('(a) enqueue the same request twice', () => {
     expect(first.created).toBe(true);
     expect(second).toEqual({ jobId: first.jobId, created: false });
     expect(await rows('select id from ai_jobs')).toHaveLength(1);
+    expect(fake.charges(prefix(req))).toBe(0); // enqueue alone never calls the provider
   });
 
   it('(a) naive: 2 job rows, both created:true', async () => {
@@ -93,6 +94,7 @@ describe('(a) enqueue the same request twice', () => {
     expect([first.created, second.created]).toEqual([true, true]);
     expect(second.jobId).not.toBe(first.jobId);
     expect(await rows('select id from naive_jobs')).toHaveLength(2);
+    expect(fake.charges(prefix(req))).toBe(0);
   });
 });
 
