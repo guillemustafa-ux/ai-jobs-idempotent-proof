@@ -9,8 +9,8 @@ It answers three asks that keep coming up in AI product work:
 
 | The ask | Where it is covered |
 | --- | --- |
-| "Make interrupted work safe ... no lost results, no stuck screens, no duplicate paid AI calls" | scenarios (c), (d), (e), (h) |
-| "background jobs that survive failure: retries, idempotency, recovery" | scenarios (a), (c), (d), (g) |
+| "Make interrupted work safe ... no lost results, no stuck screens, no duplicate paid AI calls" | scenarios (c), (d), (e), (h), (i) |
+| "background jobs that survive failure: retries, idempotency, recovery" | scenarios (a), (c), (d), (g), (i) |
 | "job queue, workers, ... concurrency limits/retries/idempotency" | scenarios (b), (g); per-tenant rate limits are out of scope (see [Scope](#scope)) |
 
 ## What it proves
@@ -64,6 +64,7 @@ Every number below is a literal in an assertion in [`test/scenarios.test.ts`](te
 | (f) a second job (another resource) with identical input | 2 for the two jobs, results equal | 1 for the two jobs (0 for the second), results equal |
 | (g) provider answers 429, then succeeds | not tested | 1, `done`, `attempt` 2 |
 | (h) the app reopens the job by its key | not tested | 1; `getJob` returns the same id while `calling` and the result when `done` |
+| (i) the same request is enqueued twice at the same time, then two workers run | 2 job rows, 2 charges | 1 job row, 1 charge, `done` |
 
 In (c) the naive twin recovers by accident: it never marks a job as taken, so the next pass
 simply finds it queued. The price of that shows up in (b), (d) and (e).
@@ -77,16 +78,19 @@ other test stays green. CI runs all six.
 
 | Footgun | The mistake | Tests that fail |
 | --- | --- | --- |
-| `no-claim-lock` | plain `SELECT` then `UPDATE`, no `FOR UPDATE SKIP LOCKED` | (b) honest |
-| `no-enqueue-dedupe` | no unique `job_key`, no `ON CONFLICT`: rows identified only by a random id | (a) honest |
+| `no-claim-lock` | plain `SELECT` then `UPDATE`, no `FOR UPDATE SKIP LOCKED` | (b) honest, (i) honest |
+| `no-enqueue-dedupe` | no unique `job_key`, no `ON CONFLICT`: rows identified only by a random id | (a) honest, (i) honest |
 | `ledger-after-call` | the `ai_calls` row is written after the provider answers | (d) honest |
 | `blind-retry-on-unconfirmed` | `maxUnconfirmedRetries` defaults to `Infinity` | (d) honest, (e) honest |
 | `no-lease-expiry` | the claim only takes `queued` jobs; an expired lease is never taken back | (c) honest |
 | `no-result-cache` | the worker never looks in `ai_results` before calling | (f) honest |
 
-`no-enqueue-dedupe` leaves (f) green: the cache is keyed by input, not by `job_key`, so it is
-untouched by that mistake. For a replay that runs after the first job finished, the cache even
-absorbs the duplicate charge; the dedupe is what stops the duplicate row.
+A result cache keyed by content absorbs a replay that runs after the first job finished; it
+cannot help when both copies are in flight at once, which is what (i) runs. Under
+`no-enqueue-dedupe`, (i) fails with `duplicate key value violates unique constraint
+"ai_calls_pkey"`: the duplicate row's worker collides with the ledger's unique `call_key`.
+(i) also fails under `no-claim-lock`: after the dedupe, its two workers race for the one job,
+the same race as (b).
 
 ## Run it
 
@@ -94,7 +98,7 @@ Requires Node 22.12 or later. No Docker and no API key.
 
 ```bash
 npm ci
-npm test              # 20 tests: 14 scenarios + 6 for the fake provider, client and schema
+npm test              # 22 tests: 16 scenarios + 6 for the fake provider, client and schema
 npx tsc --noEmit
 npm run footgun no-claim-lock
 ```
@@ -164,7 +168,7 @@ src/honest/queue.ts                    enqueue, getJob, runWorker, sweep: the gu
 src/naive/queue.ts, schema.sql         the naive twin and its table (tests only)
 src/provider-client.ts                 HTTP call -> ok | rejected | never_sent | unknown
 src/worker.ts                          one worker pass as a process; FAULT=... kills it
-test/scenarios.test.ts                 scenarios (a)-(h), honest and naive
+test/scenarios.test.ts                 scenarios (a)-(i), honest and naive
 test/provider.test.ts                  the fake's billing and the client's classification
 test/support/                          fake provider, embedded Postgres setup, worker process
 footguns/                              one patch per mistake + manifest of the tests it must fail

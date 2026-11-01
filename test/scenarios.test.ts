@@ -304,3 +304,30 @@ describe('(h) the app reopens the job by its key', () => {
     expect(fake.charges(prefix(req))).toBe(1);
   });
 });
+
+describe('(i) the same request is enqueued twice at the same time, then two workers run', () => {
+  for (const side of ['honest', 'naive'] as const) {
+    const expected = side === 'honest' ? 1 : 2;
+    it(`(i) ${side}: ${expected} job row(s) and exactly ${expected} provider charge(s)`, async () => {
+      const req = request(`i-${side}`);
+      fake.failNext(prefix(req), SLOW, SLOW); // both calls overlap, so the result cache cannot help
+      const [w1, w2] = [queue(side), queue(side)];
+      await Promise.all([w1.getJob(jobKeyFor(req)), w2.getJob(jobKeyFor(req))]); // open both connections first
+
+      const enqueued = await Promise.all([w1.enqueue(req), w2.enqueue(req)]); // a double submit
+      await Promise.all([w1.runWorker({ once: true }), w2.runWorker({ once: true })]);
+
+      const table = side === 'honest' ? 'ai_jobs' : 'naive_jobs';
+      expect(fake.charges(prefix(req))).toBe(expected);
+      expect(await rows(`select id from ${table}`)).toHaveLength(expected);
+      if (side === 'honest') {
+        expect(enqueued.map((e) => e.created).sort()).toEqual([false, true]);
+        expect(enqueued[0].jobId).toBe(enqueued[1].jobId);
+        expect(await honestJob(enqueued[0].jobId)).toEqual({ status: 'done', attempt: 1, calls: [{ status: 'succeeded', http_status: 200 }] });
+      } else {
+        expect(enqueued.map((e) => e.created)).toEqual([true, true]);
+        expect(enqueued[0].jobId).not.toBe(enqueued[1].jobId);
+      }
+    });
+  }
+});

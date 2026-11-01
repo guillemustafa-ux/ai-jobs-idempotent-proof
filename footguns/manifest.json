@@ -1,12 +1,11 @@
 {
   "no-claim-lock": {
     "description": "The claim is a plain SELECT followed by an UPDATE, without FOR UPDATE SKIP LOCKED: two workers can take the same job.",
-    "expectedFailures": ["(b) honest"]
+    "expectedFailures": ["(b) honest", "(i) honest"]
   },
   "no-enqueue-dedupe": {
     "description": "The job row is identified only by its random id: no unique job_key, no ON CONFLICT, so a replayed enqueue creates a second job.",
-    "expectedFailures": ["(a) honest"],
-    "note": "(f) stays green under this footgun: the result cache is keyed by (input_hash, model, prompt_version), not by job_key, so removing the enqueue dedupe does not touch it."
+    "expectedFailures": ["(a) honest", "(i) honest"]
   },
   "ledger-after-call": {
     "description": "The ai_calls row is written after the provider answers, so a crash right after billing leaves no trace.",
