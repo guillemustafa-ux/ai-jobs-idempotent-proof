@@ -11,7 +11,7 @@ declare module 'vitest' {
   }
 }
 
-const SCHEMA_FILES = ['supabase/migrations/0001_ai_jobs.sql'];
+const SCHEMA_FILES = ['supabase/migrations/0001_ai_jobs.sql', 'src/naive/schema.sql'];
 
 /**
  * One real Postgres for the whole run.
