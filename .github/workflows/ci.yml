@@ -32,9 +32,11 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm test
 
-  # Windows: no service containers there, so the tests start Postgres 16 with embedded-postgres.
+  # Windows: no service containers there. The first run failed while embedded-postgres was
+  # initialising, before any test ran, so this job uses the runner's preinstalled PostgreSQL 17
+  # (installed with the service stopped and disabled; user postgres, password root).
   suite-windows:
-    name: "baseline (windows, embedded-postgres): suite must pass"
+    name: "baseline (windows, runner PostgreSQL 17): suite must pass"
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +46,21 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx tsc --noEmit
+      - name: Start the runner's PostgreSQL 17
+        shell: pwsh
+        run: |
+          Set-Service postgresql-x64-17 -StartupType Manual
+          Start-Service postgresql-x64-17
+          for ($i = 1; $i -le 30; $i++) {
+            & "$env:PGBIN\pg_isready.exe" -h 127.0.0.1 -p 5432
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Start-Sleep -Seconds 1
+          }
+          Write-Error "PostgreSQL 17 was not ready after 30 seconds"
+          exit 1
       - run: npm test
+        env:
+          DATABASE_URL: postgres://postgres:root@127.0.0.1:5432/postgres
 
   # The suite is only trustworthy if it BITES. Each footgun reintroduces one real mistake;
   # the runner exits 0 only when exactly the tests documented for it fail.

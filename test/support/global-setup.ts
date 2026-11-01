@@ -30,17 +30,24 @@ export default async function setup(project: TestProject) {
     const dataRoot = mkdtempSync(join(tmpdir(), 'ai-jobs-pg-'));
     const port = await freePort();
     const { default: EmbeddedPostgres } = await import('embedded-postgres');
+    // Quiet on success, but keep the output so a failed initdb/start can say why.
+    const output: string[] = [];
+    const keep = (message: unknown) => output.push(...describe(message).split(/\r?\n/));
     const server = new EmbeddedPostgres({
       databaseDir: join(dataRoot, 'data'),
       port,
       user: 'postgres',
       password: 'postgres',
       persistent: false,
-      onLog: () => {},
-      onError: () => {},
+      onLog: keep,
+      onError: keep,
     });
-    await server.initialise();
-    await server.start();
+    try {
+      await server.initialise();
+      await server.start();
+    } catch (reason) {
+      throw new Error(`embedded-postgres failed to start: ${describe(reason)}\n${output.slice(-40).join('\n')}`);
+    }
     baseUrl = `postgres://postgres:postgres@127.0.0.1:${port}/postgres`;
     stopEmbedded = async () => {
       await server.stop();
@@ -59,6 +66,11 @@ export default async function setup(project: TestProject) {
     await runSql(baseUrl, `drop database if exists ${dbName} with (force)`);
     await stopEmbedded?.();
   };
+}
+
+function describe(value: unknown): string {
+  if (value instanceof Error) return value.stack ?? value.message;
+  return typeof value === 'string' ? value : String(value);
 }
 
 async function runSql(url: string, sql: string): Promise<void> {

@@ -113,8 +113,11 @@ directory under the OS temp dir and removes it afterwards. Either way the tests 
 database that is dropped at the end.
 
 The workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs Ubuntu with a
-`postgres:16` service container, Windows with embedded Postgres, and the footgun matrix on Ubuntu
-(not yet executed on GitHub Actions at the time of writing).
+`postgres:16` service container and the footgun matrix on Ubuntu (not yet executed on GitHub
+Actions at the time of writing). On `windows-latest` the first run failed while embedded-postgres
+was initialising, before any test ran, so the Windows job now runs the suite against the runner's
+preinstalled PostgreSQL 17, whose service the workflow starts. Locally, embedded-postgres stays
+the default.
 
 Crash tests run the worker as a separate process (`node --import tsx src/worker.ts`) that kills
 itself with `SIGKILL` at the point named by `FAULT=before_call|after_charge`. No exception stands
