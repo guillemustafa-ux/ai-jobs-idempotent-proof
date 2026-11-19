@@ -77,7 +77,9 @@ simply finds it queued. The price of that shows up in (b), (d) and (e).
 Each file in [`footguns/`](footguns/) is a small patch that reintroduces one real mistake.
 `npm run footgun <name>` applies it, runs the whole suite, reverts it, and prints `PASS` only when
 **exactly** the tests listed in [`footguns/manifest.json`](footguns/manifest.json) fail and every
-other test stays green. The workflow runs all eight; the first green run on GitHub Actions (with the first six) is
+other test stays green. The workflow runs all eight (first green run with all eight:
+[44444271007](https://github.com/guillemustafa-ux/ai-jobs-idempotent-proof/actions/runs/44444271007));
+the first green run on GitHub Actions, with the first six, is
 [41274697998](https://github.com/guillemustafa-ux/ai-jobs-idempotent-proof/actions/runs/41274697998).
 
 | Footgun | The mistake | Tests that fail |
