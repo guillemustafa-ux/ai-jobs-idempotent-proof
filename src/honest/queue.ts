@@ -84,8 +84,9 @@ export function createHonestQueue(opts: QueueOptions): Queue {
   }
 
   async function processJob(job: JobRow): Promise<void> {
-    // A previous owner died (or hung) mid-call. That call may have been billed.
-    const pending = await pool.query(`select 1 from ai_calls where job_id = $1 and status = 'started'`, [job.id]);
+    // A previous owner died (or hung) mid-call. That call may have been billed. 'unknown' counts
+    // too: the owner may have died after marking the call and before stopping the job.
+    const pending = await pool.query(`select 1 from ai_calls where job_id = $1 and status in ('started', 'unknown')`, [job.id]);
     if (pending.rowCount && (await settleUnknown(pool, job.id, { requeue: false })) === 'unconfirmed') return;
 
     const cached = await pool.query(`select 1 from ai_results where cache_key = $1`, [job.cache_key]);
@@ -111,6 +112,7 @@ export function createHonestQueue(opts: QueueOptions): Queue {
       }
       if (outcome.kind === 'unknown') {
         await finishCall(callKey, 'unknown', null);
+        crashIfAt(opts.crashAt, 'after_unknown_marked');
         if ((await settleUnknown(pool, job.id, { requeue: false })) === 'unconfirmed') return;
         continue; // policy allows another paid attempt
       }
@@ -201,7 +203,7 @@ export function createHonestQueue(opts: QueueOptions): Queue {
       const { rows } = await client.query(
         `select j.id from ai_jobs j
           where j.status in ('claimed', 'calling') and j.lease_until < now()
-            and exists (select 1 from ai_calls c where c.job_id = j.id and c.status = 'started')
+            and exists (select 1 from ai_calls c where c.job_id = j.id and c.status in ('started', 'unknown'))
           for update skip locked`,
       );
       for (const { id } of rows) {

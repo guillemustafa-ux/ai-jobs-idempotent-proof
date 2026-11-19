@@ -9,7 +9,7 @@ It answers three asks that keep coming up in AI product work:
 
 | The ask | Where it is covered |
 | --- | --- |
-| "Make interrupted work safe ... no lost results, no stuck screens, no duplicate paid AI calls" | scenarios (c), (d), (e), (h), (i) |
+| "Make interrupted work safe ... no lost results, no stuck screens, no duplicate paid AI calls" | scenarios (c), (d), (e), (h), (i), (j) |
 | "background jobs that survive failure: retries, idempotency, recovery" | scenarios (a), (c), (d), (g), (i) |
 | "job queue, workers, ... concurrency limits/retries/idempotency" | scenarios (b), (g); per-tenant rate limits are out of scope (see [Scope](#scope)) |
 
@@ -39,6 +39,8 @@ The honest queue (`src/honest/`) does four things:
 4. **Unknown means stop, not retry.** A `started` row that is still `started` after the lease
    ran out (or a timeout the worker saw itself) marks the call `unknown` and the job
    `unconfirmed`. It is not called again unless `maxUnconfirmedRetries` (default `0`) allows it.
+   A call already marked `unknown` stops the job the same way, on re-claim and in the sweep: the
+   worker may have died after marking the call and before stopping the job (scenario (j)).
    An error status from the provider (the fake uses 429 and 500) comes with no charge from the
    fake, so it is retried, up to `maxAttempts`.
 
@@ -65,6 +67,7 @@ Every number below is a literal in an assertion in [`test/scenarios.test.ts`](te
 | (g) provider answers 429, then succeeds | not tested | 1, `done`, `attempt` 2 |
 | (h) the app reopens the job by its key | not tested | 1; `getJob` returns the same id while `calling` and the result when `done` |
 | (i) the same request is enqueued twice at the same time, then two workers run | 2 job rows, 2 charges | 1 job row, 1 charge, `done` |
+| (j) worker process killed after it marked a timed-out call `unknown`, before it stopped the job | not tested | 1, `unconfirmed` through the sweep and through a re-claim; the next worker pass makes no call |
 
 In (c) the naive twin recovers by accident: it never marks a job as taken, so the next pass
 simply finds it queued. The price of that shows up in (b), (d) and (e).
@@ -74,7 +77,7 @@ simply finds it queued. The price of that shows up in (b), (d) and (e).
 Each file in [`footguns/`](footguns/) is a small patch that reintroduces one real mistake.
 `npm run footgun <name>` applies it, runs the whole suite, reverts it, and prints `PASS` only when
 **exactly** the tests listed in [`footguns/manifest.json`](footguns/manifest.json) fail and every
-other test stays green. The workflow runs all six; the first green run on GitHub Actions is
+other test stays green. The workflow runs all eight; the first green run on GitHub Actions (with the first six) is
 [41274697998](https://github.com/guillemustafa-ux/ai-jobs-idempotent-proof/actions/runs/41274697998).
 
 | Footgun | The mistake | Tests that fail |
@@ -82,9 +85,11 @@ other test stays green. The workflow runs all six; the first green run on GitHub
 | `no-claim-lock` | plain `SELECT` then `UPDATE`, no `FOR UPDATE SKIP LOCKED` | (b) honest, (i) honest |
 | `no-enqueue-dedupe` | no unique `job_key`, no `ON CONFLICT`: rows identified only by a random id | (a) honest, (i) honest |
 | `ledger-after-call` | the `ai_calls` row is written after the provider answers | (d) honest |
-| `blind-retry-on-unconfirmed` | `maxUnconfirmedRetries` defaults to `Infinity` | (d) honest, (e) honest |
-| `no-lease-expiry` | the claim only takes `queued` jobs; an expired lease is never taken back | (c) honest |
+| `blind-retry-on-unconfirmed` | `maxUnconfirmedRetries` defaults to `Infinity` | (d) honest, (e) honest, (j) honest, sweep, (j) honest, no sweep |
+| `no-lease-expiry` | the claim only takes `queued` jobs; an expired lease is never taken back | (c) honest, (j) honest, no sweep |
 | `no-result-cache` | the worker never looks in `ai_results` before calling | (f) honest |
+| `claim-ignores-unknown-call` | on re-claim the worker only looks for `started` calls, so a call already marked `unknown` is paid for again | (j) honest, no sweep |
+| `sweep-ignores-unknown-call` | the sweep only settles jobs with a `started` call, so a job whose call is already `unknown` is never stopped | (j) honest, sweep |
 
 A result cache keyed by content absorbs a replay that runs after the first job finished; it
 cannot help when both copies are in flight at once, which is what (i) runs. Under
@@ -102,7 +107,7 @@ Node 22.12 or later is declared in `engines`; exercised locally on Node 24.16 an
 
 ```bash
 npm ci
-npm test              # 22 tests: 16 scenarios + 6 for the fake provider, client and schema
+npm test              # 24 tests: 18 scenarios + 6 for the fake provider, client and schema
 npx tsc --noEmit
 npm run footgun no-claim-lock
 ```
@@ -120,7 +125,7 @@ preinstalled PostgreSQL 17, whose service the workflow starts. Locally, embedded
 the default.
 
 Crash tests run the worker as a separate process (`node --import tsx src/worker.ts`) that kills
-itself with `SIGKILL` at the point named by `FAULT=before_call|after_charge`. No exception stands
+itself with `SIGKILL` at the point named by `FAULT=before_call|after_charge|after_unknown_marked`. No exception stands
 in for a crash: nothing after that point runs, not even a `finally`.
 
 ## Supabase notes
@@ -176,7 +181,7 @@ src/honest/queue.ts                    enqueue, getJob, runWorker, sweep: the gu
 src/naive/queue.ts, schema.sql         the naive twin and its table (tests only)
 src/provider-client.ts                 HTTP call -> ok | rejected | never_sent | unknown
 src/worker.ts                          one worker pass as a process; FAULT=... kills it
-test/scenarios.test.ts                 scenarios (a)-(i), honest and naive
+test/scenarios.test.ts                 scenarios (a)-(j), honest and naive ((g), (h) and (j) honest only)
 test/provider.test.ts                  the fake's billing and the client's classification
 test/support/                          fake provider, embedded Postgres setup, worker process
 footguns/                              one patch per mistake + manifest of the tests it must fail

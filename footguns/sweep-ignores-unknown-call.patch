@@ -1,0 +1,12 @@
+diff --git a/src/honest/queue.ts b/src/honest/queue.ts
+--- a/src/honest/queue.ts
++++ b/src/honest/queue.ts
+@@ -203,7 +203,7 @@ export function createHonestQueue(opts: QueueOptions): Queue {
+       const { rows } = await client.query(
+         `select j.id from ai_jobs j
+           where j.status in ('claimed', 'calling') and j.lease_until < now()
+-            and exists (select 1 from ai_calls c where c.job_id = j.id and c.status in ('started', 'unknown'))
++            and exists (select 1 from ai_calls c where c.job_id = j.id and c.status = 'started')
+           for update skip locked`,
+       );
+       for (const { id } of rows) {

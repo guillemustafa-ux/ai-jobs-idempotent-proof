@@ -77,6 +77,8 @@ jobs:
           - blind-retry-on-unconfirmed
           - no-lease-expiry
           - no-result-cache
+          - claim-ignores-unknown-call
+          - sweep-ignores-unknown-call
     services:
       postgres:
         image: postgres:16

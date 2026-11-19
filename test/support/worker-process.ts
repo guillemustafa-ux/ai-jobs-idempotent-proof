@@ -42,7 +42,7 @@ export function runWorkerProcess(opts: {
     child.stderr.on('data', (d: Buffer) => (output += d.toString()));
     child.on('error', reject);
     child.on('exit', (code, signal) => {
-      const crashed = /crash: (before_call|after_charge)/.exec(output);
+      const crashed = /crash: (before_call|after_charge|after_unknown_marked)/.exec(output);
       resolve({
         code,
         signal,

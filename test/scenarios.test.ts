@@ -71,7 +71,7 @@ async function waitForLeaseExpiry(jobId: string) {
   }
 }
 
-const worker = (side: 'honest' | 'naive', fault: 'before_call' | 'after_charge') =>
+const worker = (side: 'honest' | 'naive', fault: 'before_call' | 'after_charge' | 'after_unknown_marked') =>
   runWorkerProcess({ side, fault, databaseUrl, providerUrl: fake.url, leaseSeconds: LEASE_SECONDS, callTimeoutMs: CALL_TIMEOUT_MS });
 
 describe('(a) enqueue the same request twice', () => {
@@ -332,4 +332,43 @@ describe('(i) the same request is enqueued twice at the same time, then two work
       }
     });
   }
+});
+
+describe('(j) the worker process dies after marking a call unknown, before stopping the job', () => {
+  // The call row already says 'unknown' (committed), the job still says 'calling'.
+  async function crashAfterUnknownMarked(tenant: string) {
+    const req = request(tenant);
+    fake.failNext(prefix(req), TOO_SLOW);
+    const { jobId } = await queue('honest').enqueue(req);
+
+    const exit = await worker('honest', 'after_unknown_marked');
+    expect(exit.crashedAt).toBe('after_unknown_marked');
+    expect(killedBySigkill(exit)).toBe(true);
+    expect(fake.charges(prefix(req))).toBe(1);
+    expect(await honestJob(jobId)).toEqual({ status: 'calling', attempt: 1, calls: [{ status: 'unknown', http_status: null }] });
+    await waitForLeaseExpiry(jobId);
+    return { req, jobId };
+  }
+
+  it('(j) honest, sweep: the job stops unconfirmed and the next worker pass makes no second call', async () => {
+    const q = queue('honest');
+    const { req, jobId } = await crashAfterUnknownMarked('j-sweep');
+
+    expect(await q.sweep()).toEqual({ unconfirmed: 1, requeued: 0 });
+    expect(await honestJob(jobId)).toEqual({ status: 'unconfirmed', attempt: 1, calls: [{ status: 'unknown', http_status: null }] });
+
+    await q.runWorker({ once: true });
+    expect(fake.charges(prefix(req))).toBe(1);
+    expect((await honestJob(jobId)).status).toBe('unconfirmed');
+  });
+
+  it('(j) honest, no sweep: the next worker re-claims the job, stops it unconfirmed, makes no second call', async () => {
+    const q = queue('honest');
+    const { req, jobId } = await crashAfterUnknownMarked('j-claim');
+
+    await q.runWorker({ once: true });
+    expect(fake.charges(prefix(req))).toBe(1);
+    expect(await honestJob(jobId)).toEqual({ status: 'unconfirmed', attempt: 1, calls: [{ status: 'unknown', http_status: null }] });
+    expect(await rows('select cache_key from ai_results')).toHaveLength(0);
+  });
 });

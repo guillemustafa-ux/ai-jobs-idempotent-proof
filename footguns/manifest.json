@@ -13,14 +13,22 @@
   },
   "blind-retry-on-unconfirmed": {
     "description": "max_unconfirmed_retries defaults to Infinity: a call that may have been billed is sent again.",
-    "expectedFailures": ["(d) honest", "(e) honest"]
+    "expectedFailures": ["(d) honest", "(e) honest", "(j) honest, sweep", "(j) honest, no sweep"]
   },
   "no-lease-expiry": {
     "description": "The claim only takes queued jobs; an expired lease is never taken back, so a job whose worker died stays claimed forever.",
-    "expectedFailures": ["(c) honest"]
+    "expectedFailures": ["(c) honest", "(j) honest, no sweep"]
   },
   "no-result-cache": {
     "description": "The worker never looks in ai_results before calling: identical input is paid for again.",
     "expectedFailures": ["(f) honest"]
+  },
+  "claim-ignores-unknown-call": {
+    "description": "On re-claim, the worker only looks for 'started' calls: a worker that died after marking its call 'unknown' leaves a job the next worker pays for again.",
+    "expectedFailures": ["(j) honest, no sweep"]
+  },
+  "sweep-ignores-unknown-call": {
+    "description": "The sweep only settles jobs with a 'started' call: a job whose call was already marked 'unknown' is never stopped.",
+    "expectedFailures": ["(j) honest, sweep"]
   }
 }

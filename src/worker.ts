@@ -6,7 +6,8 @@
  *   SIDE             honest (default) | naive
  *   LEASE_SECONDS    claim lease, default 30
  *   CALL_TIMEOUT_MS  provider call timeout, default 10000
- *   FAULT            before_call | after_charge: SIGKILL this process at that point (crash tests)
+ *   FAULT            before_call | after_charge | after_unknown_marked: SIGKILL this process at
+ *                    that point (crash tests)
  */
 import { CRASH_POINTS, type CrashPoint } from './crash.js';
 import { createHonestQueue } from './honest/queue.js';
